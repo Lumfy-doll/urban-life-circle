@@ -1,0 +1,54 @@
+{
+  "type": "Collection",
+  "id": "poi-facilities",
+  "stac_version": "1.0.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/eo/v1.0.0/schema.json"
+  ],
+  "title": "城市设施POI数据集（武汉市）",
+  "description": "涵盖医疗卫生、教育资源、商业网点、公园绿地、交通枢纽、养老服务、体育休闲等7大类武汉市公共服务设施空间点位数据，覆盖主城区七区+高新区/经开区，时间覆盖2019-2024年。",
+  "license": "proprietary",
+  "providers": [
+    {
+      "name": "高德地图POI开放平台",
+      "roles": ["producer", "licensor"],
+      "url": "https://lbs.amap.com/"
+    },
+    {
+      "name": "城市生活圈监测平台",
+      "roles": ["host", "processor"]
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [[113.65, 30.25, 114.45, 30.75]]
+    },
+    "temporal": {
+      "interval": [["2019-01-01T00:00:00Z", "2024-12-31T23:59:59Z"]]
+    }
+  },
+  "summaries": {
+    "datetime": {
+      "minimum": "2019-01-01T00:00:00Z",
+      "maximum": "2024-12-31T23:59:59Z"
+    },
+    "poi:category": [
+      "medical", "education", "park", "shopping", "transport", "elderly", "sport"
+    ],
+    "poi:total_count": {
+      "minimum": 88000,
+      "maximum": 142000
+    }
+  },
+  "links": [
+    { "rel": "self",  "href": "./poi-facilities.json",    "type": "application/json" },
+    { "rel": "root",  "href": "../stac-catalog.json",     "type": "application/json" },
+    { "rel": "parent","href": "../stac-catalog.json",     "type": "application/json" },
+    { "rel": "item",  "href": "../items/poi-2024.json",   "type": "application/json", "title": "2024年设施POI" },
+    { "rel": "item",  "href": "../items/poi-2023.json",   "type": "application/json", "title": "2023年设施POI" },
+    { "rel": "item",  "href": "../items/poi-2022.json",   "type": "application/json", "title": "2022年设施POI" },
+    { "rel": "item",  "href": "../items/poi-2021.json",   "type": "application/json", "title": "2021年设施POI" },
+    { "rel": "item",  "href": "../items/poi-2020.json",   "type": "application/json", "title": "2020年设施POI" },
+    { "rel": "item",  "href": "../items/poi-2019.json",   "type": "application/json", "title": "2019年设施POI" }
+  ]
+}

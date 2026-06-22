@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>城市"生活圈"品质动态监测与评估平台</title>
+  <meta name="description" content="基于多源大数据的城市生活圈品质动态监测与评估平台，适配STAC标准，整合Cesium三维地图、可达性分析、多维指标评估等功能" />
+
+  <!-- ── Cesium ── -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+  <!-- ── Chart.js ── -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- ── 自定义样式 ── -->
+  <link rel="stylesheet" href="css/main.css" />
+
+  <style>
+    /* 行内补充：地图覆盖Cesium默认样式 */
+    .cesium-widget canvas { outline: none; }
+    #timeline-track { cursor: pointer; }
+    .module-panel { display: block; }
+
+    /* 右侧面板内容区滚动 */
+    #right-panel .panel-body { max-height: calc(50vh - 64px); overflow-y: auto; }
+
+    /* 分割线 */
+    .divider { height: 1px; background: var(--color-border); margin: 10px 0; }
+
+    /* STAC items section */
+    #stac-items-section { margin-top: 10px; }
+
+    /* 监测面板综合分 */
+    .monitor-score-big {
+      font-family: var(--font-display);
+      font-size: 48px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      text-align: center;
+      margin: 10px 0 4px;
+    }
+  .monitor-score-label {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;           /* 加粗 */
+    color: var(--color-text-secondary);
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.20);
+  }
+  </style>
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     加载动画
+═══════════════════════════════════════════════════ -->
+<div id="loading-overlay">
+  <div class="loader-logo">🗺️</div>
+  <div class="loader-title">城市生活圈监测平台</div>
+  <div class="loader-sub">URBAN LIFE CIRCLE MONITORING</div>
+  <div class="loader-bar">
+    <div class="loader-fill"></div>
+  </div>
+  <div class="loader-text">正在初始化地图服务与数据目录…</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     顶部导航栏
+═══════════════════════════════════════════════════ -->
+<header id="header">
+  <!-- 品牌 -->
+  <div class="header-brand">
+    <div class="brand-icon"><img src="images/brand-icon.png" alt="品牌图标" style="width:100%;height:100%;object-fit:contain;border-radius:8px;" /></div>
+    <div class="brand-text">
+      <div class="brand-title">城市"生活圈"品质监测与评估平台</div>
+    </div>
+  </div>
+
+  <!-- 功能导航 -->
+  <nav class="header-nav">
+    <button class="nav-btn active" data-module="overview">
+      综合概览
+    </button>
+    <button class="nav-btn" data-module="stac">
+      STAC目录
+    </button>
+    <button class="nav-btn" data-module="analysis">
+      可达性分析
+    </button>
+    <button class="nav-btn" data-module="monitor">
+      动态监测
+    </button>
+    <button class="nav-btn" data-module="layers">
+      图层管理
+    </button>
+  </nav>
+
+  <!-- 右侧状态 -->
+  <div class="header-status">
+    <div class="status-chip">
+      <span class="status-dot"></span>
+      <span>服务在线</span>
+    </div>
+    <div class="status-chip">
+      <span style="font-size:13px;">📡</span>
+      <span>STAC v1.0</span>
+    </div>
+    <div class="status-time" id="realtime-clock">00:00:00</div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════
+     主体
+═══════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- ─── 左侧控制面板 ─────────────────────────────── -->
+  <aside id="left-panel">
+
+    <!-- 模块：综合概览 -->
+    <div id="panel-overview" class="module-panel" style="overflow-y:auto;height:100%;">
+
+      <!-- 生活圈综合评分 -->
+      <div class="panel-section">
+        <div class="panel-header" data-target="collapse-score">
+          <div class="panel-title">
+            <span class="panel-title-icon">⭐</span>生活圈综合评分
+          </div>
+          <span class="panel-chevron">▼</span>
+        </div>
+        <div class="panel-body" id="collapse-score">
+          <!-- 评分环 -->
+          <div class="score-ring-wrap">
+            <div class="score-ring" id="score-ring-main">
+              <svg viewBox="0 0 100 100" width="100" height="100">
+                <circle class="score-ring-track" cx="50" cy="50" r="45"/>
+                <circle class="score-ring-fill" cx="50" cy="50" r="45"
+                        style="stroke:#3b82f6;stroke-dasharray:283;stroke-dashoffset:283;transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1);"/>
+              </svg>
+              <div class="score-ring-label">
+                <div class="score-num">0</div>
+                <div class="score-unit">综合分</div>
+              </div>
+            </div>
+          </div>
+          <!-- 各维度评分条 -->
+          <div class="score-list" id="score-list-container">
+            <div style="color:var(--color-text-muted);font-size:12px;text-align:center;padding:8px 0;">加载中…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 雷达图 -->
+      <div class="panel-section">
+        <div class="panel-header" data-target="collapse-radar">
+          <div class="panel-title">
+            <span class="panel-title-icon">🕸️</span>多维评估雷达图
+          </div>
+          <span class="panel-chevron">▼</span>
+        </div>
+        <div class="panel-body" id="collapse-radar">
+          <div class="chart-container" style="height:220px;display:flex;align-items:center;justify-content:center;">
+            <canvas id="radar-chart" class="chart-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 城市选择 -->
+      <div class="panel-section">
+        <div class="panel-header" data-target="collapse-city">
+          <div class="panel-title">
+            <span class="panel-title-icon">🏙️</span>城市与区域
+          </div>
+          <span class="panel-chevron">▼</span>
+        </div>
+        <div class="panel-body" id="collapse-city">
+          <div class="control-group">
+            <label class="control-label">目标城市</label>
+            <select id="city-select" onchange="onCityChange(this.value)">
+              <option value="wuhan" selected>武汉市</option>
+              <option value="chengdu">成都市</option>
+              <option value="chongqing">重庆市</option>
+              <option value="nanjing">南京市</option>
+              <option value="guangzhou">广州市</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="control-label">分析单元</label>
+            <div class="btn-group">
+              <button class="btn active" onclick="onUnitChange(this,'district')">行政区</button>
+              <button class="btn" onclick="onUnitChange(this,'grid')">网格</button>
+              <button class="btn" onclick="onUnitChange(this,'community')">社区</button>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full mt-8" onclick="onFlyToCity()">
+            🚀 飞行到城市
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 模块：STAC目录 -->
+    <div id="panel-stac" class="module-panel hidden" style="overflow-y:auto;height:100%;">
+      <div class="panel-section" style="flex:none;">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-title-icon">🗂️</span>STAC 空间数据目录
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="font-size:11px;color:var(--color-text-muted);line-height:1.6;margin-bottom:10px;padding:8px;background:var(--color-bg-card);border-radius:8px;border:1px solid var(--color-border);">
+            🔗 符合 <strong style="color:#06b6d4;">STAC v1.0.0</strong> 标准<br>
+            整合多源空间数据：POI、遥感、热力、路网
+          </div>
+          <div id="stac-catalog-container">
+            <div style="color:var(--color-text-muted);font-size:12px;text-align:center;padding:10px;">点击上方「STAC目录」模块加载…</div>
+          </div>
+          <div id="stac-items-section" class="hidden">
+            <div class="divider"></div>
+            <div class="control-label">数据项 Items</div>
+            <div id="stac-items-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 模块：可达性分析 -->
+    <div id="panel-analysis" class="module-panel hidden" style="overflow-y:auto;height:100%;">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-title-icon">📍</span>步行可达性分析
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="padding:10px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:8px;font-size:12px;color:var(--color-text-secondary);margin-bottom:12px;line-height:1.6;">
+            💡 <strong style="color:var(--color-accent);">点击地图</strong> 任意位置，自动生成步行等时圈与设施可达性报告
+          </div>
+
+          <div class="control-group">
+            <label class="control-label">等时圈时间设置</label>
+            <select id="iso-minutes-select">
+              <option value="15">5 / 10 / 15 分钟（默认）</option>
+              <option value="10">5 / 10 分钟</option>
+              <option value="20">5 / 10 / 20 分钟</option>
+              <option value="30">5 / 15 / 30 分钟</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label">分析设施类型</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+              <label class="layer-item" style="cursor:pointer;">
+                <input type="checkbox" checked style="accent-color:#ef4444;"> <span class="layer-label">🏥 医疗</span>
+              </label>
+              <label class="layer-item" style="cursor:pointer;">
+                <input type="checkbox" checked style="accent-color:#3b82f6;"> <span class="layer-label">🏫 教育</span>
+              </label>
+              <label class="layer-item" style="cursor:pointer;">
+                <input type="checkbox" checked style="accent-color:#10b981;"> <span class="layer-label">🌳 公园</span>
+              </label>
+              <label class="layer-item" style="cursor:pointer;">
+                <input type="checkbox" checked style="accent-color:#f59e0b;"> <span class="layer-label">🛒 商业</span>
+              </label>
+              <label class="layer-item" style="cursor:pointer;">
+                <input type="checkbox" checked style="accent-color:#8b5cf6;"> <span class="layer-label">🚇 交通</span>
+              </label>
+              <label class="layer-item" style="cursor:pointer;">
+                <input type="checkbox" style="accent-color:#06b6d4;"> <span class="layer-label">🏠 养老</span>
+              </label>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn btn-primary" style="flex:1;" onclick="onManualAnalysis()">▶ 分析城市中心</button>
+            <button class="btn btn-ghost btn-icon" onclick="AnalysisManager.clearAnalysis()" title="清除">🗑️</button>
+          </div>
+
+          <!-- 等时圈图例 -->
+          <div class="legend-wrap mt-8">
+            <div class="legend-title">等时圈图例</div>
+            <div class="isochrone-legend">
+              <div class="iso-chip"><span class="iso-dot" style="background:#3b82f6;"></span>5 min</div>
+              <div class="iso-chip"><span class="iso-dot" style="background:#06b6d4;"></span>10 min</div>
+              <div class="iso-chip"><span class="iso-dot" style="background:#10b981;"></span>15 min</div>
+            </div>
+          </div>
+
+          <!-- 全区域综合统计 -->
+          <div class="divider"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div class="control-label" style="margin:0;">全区域综合数据</div>
+            <span style="font-size:10px;color:#06b6d4;background:rgba(6,182,212,0.10);padding:1px 6px;border-radius:4px;border:1px solid rgba(6,182,212,0.25);">武汉市全域</span>
+          </div>
+
+          <!-- 统计卡片（紧凑版） -->
+          <div class="stat-card" style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;color:var(--color-text-secondary);">监测设施数</span>
+              <span class="stat-card-badge badge-blue" style="font-size:9px;">POI</span>
+            </div>
+            <div style="font-size:22px;font-weight:800;color:var(--color-text);line-height:1.2;">5,147<span style="font-size:12px;font-weight:600;color:var(--color-text-muted);">处</span></div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div class="progress-bar" style="flex:1;height:4px;"><div class="progress-fill fill-blue" style="width:85%;height:100%;"></div></div>
+              <span style="font-size:9px;color:var(--color-text-muted);">▲ 6.2%</span>
+            </div>
+          </div>
+          <div class="stat-card" style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;color:var(--color-text-secondary);">15min覆盖率</span>
+              <span class="stat-card-badge badge-green" style="font-size:9px;">优秀</span>
+            </div>
+            <div style="font-size:22px;font-weight:800;color:var(--color-text);line-height:1.2;">89.2<span style="font-size:12px;font-weight:600;color:var(--color-text-muted);">%</span></div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div class="progress-bar" style="flex:1;height:4px;"><div class="progress-fill fill-green" style="width:89.2%;height:100%;"></div></div>
+              <span style="font-size:9px;color:var(--color-text-muted);">▲ 2.1%</span>
+            </div>
+          </div>
+          <div class="stat-card" style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;color:var(--color-text-secondary);">公园绿地率</span>
+              <span class="stat-card-badge badge-green" style="font-size:9px;">良好</span>
+            </div>
+            <div style="font-size:22px;font-weight:800;color:var(--color-text);line-height:1.2;">46.8<span style="font-size:12px;font-weight:600;color:var(--color-text-muted);">%</span></div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div class="progress-bar" style="flex:1;height:4px;"><div class="progress-fill fill-green" style="width:46.8%;height:100%;"></div></div>
+              <span style="font-size:9px;color:var(--color-text-muted);">▲ 1.9%</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;color:var(--color-text-secondary);">均衡性指数</span>
+              <span class="stat-card-badge badge-green" style="font-size:9px;">均衡</span>
+            </div>
+            <div style="font-size:22px;font-weight:800;color:var(--color-text);line-height:1.2;">0.81<span style="font-size:12px;font-weight:600;color:var(--color-text-muted);">Gini</span></div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div class="progress-bar" style="flex:1;height:4px;"><div class="progress-fill fill-amber" style="width:81%;height:100%;"></div></div>
+              <span style="font-size:9px;color:var(--color-text-muted);">▲ 0.03</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 模块：动态监测 -->
+    <div id="panel-monitor" class="module-panel hidden" style="overflow-y:auto;height:100%;">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-title-icon">📈</span>生活圈动态监测
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="monitor-score-big" id="monitor-composite">--</div>
+          <div class="monitor-score-label">当前年度生活圈综合质量指数</div>
+          <div class="divider"></div>
+          <div class="control-label">各维度得分变化</div>
+          <div id="monitor-dimension-list">
+            <div style="color:var(--color-text-muted);font-size:12px;text-align:center;padding:10px;">加载中…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 模块：图层管理 -->
+    <div id="panel-layers" class="module-panel hidden" style="overflow-y:auto;height:100%;">
+      <div class="panel-section">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-title-icon">🗺️</span>底图切换
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+            <button class="btn btn-ghost"   onclick="MapManager.switchBaseMap('satellite')">🛰️ 影像</button>
+            <button class="btn btn-outline" onclick="MapManager.switchBaseMap('vector')">🗺️ 矢量</button>
+            <button class="btn btn-ghost"   onclick="MapManager.switchBaseMap('dark')">🌙 暗色</button>
+          </div>
+
+          <div class="control-label">数据图层</div>
+          <div class="layer-item active" onclick="onLayerToggle(this,'poi-medical')">
+            <span class="layer-dot" style="background:#ef4444;"></span>
+            <span class="layer-label">医疗设施 POI</span>
+            <label class="layer-toggle">
+              <input type="checkbox" checked>
+              <span class="layer-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="layer-item" onclick="onLayerToggle(this,'poi-education')">
+            <span class="layer-dot" style="background:#3b82f6;"></span>
+            <span class="layer-label">教育设施 POI</span>
+            <label class="layer-toggle">
+              <input type="checkbox">
+              <span class="layer-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="layer-item" onclick="onLayerToggle(this,'poi-park')">
+            <span class="layer-dot" style="background:#10b981;"></span>
+            <span class="layer-label">公园绿地 POI</span>
+            <label class="layer-toggle">
+              <input type="checkbox">
+              <span class="layer-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="layer-item" onclick="onLayerToggle(this,'heatmap')">
+            <span class="layer-dot" style="background:linear-gradient(#f59e0b,#ef4444);"></span>
+            <span class="layer-label">人口热力图</span>
+            <label class="layer-toggle">
+              <input type="checkbox">
+              <span class="layer-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="layer-item" onclick="onLayerToggle(this,'isochrone')">
+            <span class="layer-dot" style="background:#8b5cf6;"></span>
+            <span class="layer-label">服务可达等时圈</span>
+            <label class="layer-toggle">
+              <input type="checkbox">
+              <span class="layer-toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+          <div class="control-label">图层透明度</div>
+          <div class="control-group">
+            <label class="control-label">整体叠加层</label>
+            <input type="range" min="0" max="100" value="80" oninput="onOpacityChange(this.value)">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ─── Cesium 地图区域 ───────────────────────────── -->
+  <main id="cesium-container">
+    <div id="cesiumViewer"></div>
+
+    <!-- 浮动工具栏 -->
+    <div id="map-toolbar">
+      <button class="map-tool-btn" title="放大" onclick="MapManager.viewer.camera.zoomIn(5000)">＋</button>
+      <button class="map-tool-btn" title="缩小" onclick="MapManager.viewer.camera.zoomOut(5000)">－</button>
+      <button class="map-tool-btn" title="复位" onclick="onFlyToCity()">⌂</button>
+      <button class="map-tool-btn" title="2D/3D切换" onclick="toggleSceneMode()">⬚</button>
+      <button class="map-tool-btn" title="全屏" onclick="toggleFullscreen()">⤢</button>
+    </div>
+
+    <!-- 要素信息弹窗 -->
+    <div id="info-popup">
+      <button class="popup-close" onclick="closePopup()">✕</button>
+      <div class="popup-title" id="popup-title">设施信息</div>
+      <div id="popup-content"></div>
+    </div>
+  </main>
+
+  <!-- ─── 右侧数据面板 ──────────────────────────────── -->
+  <aside id="right-panel">
+
+    <!-- 分析结果面板 -->
+    <div class="panel-section">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-title-icon">📍</span>可达性分析结果
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="accessibility-result">
+          <div style="color:var(--color-text-muted);font-size:12px;text-align:center;padding:12px 0;">点击地图开始分析…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 时序趋势图 -->
+    <div class="panel-section" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-title-icon">📉</span>时序趋势分析
+        </div>
+      </div>
+      <div class="panel-body" style="flex:1;min-height:0;">
+        <div style="height:160px;position:relative;">
+          <canvas id="trend-chart"></canvas>
+        </div>
+        <div class="divider"></div>
+        <div style="height:150px;position:relative;margin-top:4px;">
+          <canvas id="bar-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</div><!-- #app -->
+
+<!-- ═══════════════════════════════════════════════════
+     底部时间轴条
+═══════════════════════════════════════════════════ -->
+<div id="bottom-bar">
+  <!-- 播放控制 -->
+  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+    <button class="btn btn-ghost btn-sm" id="play-btn" onclick="UIManager.togglePlay()" title="播放时序动画">▶</button>
+    <span style="font-size:11px;color:var(--color-text-muted);">时序</span>
+  </div>
+
+  <!-- 年份节点 -->
+  <div class="bottom-year-list">
+    <div class="year-node" data-year="2020">
+      <div class="year-dot"></div>
+      <div class="year-label">2020</div>
+    </div>
+    <div class="year-line"></div>
+    <div class="year-node" data-year="2021">
+      <div class="year-dot"></div>
+      <div class="year-label">2021</div>
+    </div>
+    <div class="year-line"></div>
+    <div class="year-node" data-year="2022">
+      <div class="year-dot"></div>
+      <div class="year-label">2022</div>
+    </div>
+    <div class="year-line"></div>
+    <div class="year-node" data-year="2023">
+      <div class="year-dot"></div>
+      <div class="year-label">2023</div>
+    </div>
+    <div class="year-line"></div>
+    <div class="year-node" data-year="2024">
+      <div class="year-dot"></div>
+      <div class="year-label">2024</div>
+    </div>
+    <div class="year-line"></div>
+    <div class="year-node" data-year="2025">
+      <div class="year-dot"></div>
+      <div class="year-label">2025</div>
+    </div>
+    <div class="year-line"></div>
+    <div class="year-node active" data-year="2026">
+      <div class="year-dot"></div>
+      <div class="year-label">2026</div>
+    </div>
+  </div>
+
+  <!-- 右侧当前年份标签 -->
+  <div style="flex-shrink:0;text-align:right;">
+    <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--color-accent);line-height:1;">2026</div>
+    <div style="font-size:10px;color:var(--color-text-muted);">当前年份</div>
+  </div>
+</div>
+
+<!-- ─── 吐司容器 ────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     JS 模块加载（顺序依赖）
+═══════════════════════════════════════════════════ -->
+<script src="js/modules/map.js"></script>
+<script src="js/modules/stac.js"></script>
+<script src="js/modules/analysis.js"></script>
+<script src="js/modules/charts.js"></script>
+<script src="js/modules/ui.js"></script>
+
+<!-- ── 主入口脚本 ── -->
+<script>
+// ──────────────────────────────────────────
+//  应用启动
+// ──────────────────────────────────────────
+(function bootstrap() {
+  // 选择初始年份 = 当前年 2026
+  const INIT_YEAR = 2026;
+
+  window.addEventListener('load', function () {
+    // 1. 初始化 Cesium 地图
+    MapManager.init('cesiumViewer');
+
+    // 2. 初始化 UI 交互（含时钟、时间轴、导航）
+    UIManager.init();
+
+    // 3. 初始化图表（延迟等 DOM 稳定）
+    setTimeout(() => {
+      ChartManager.init(INIT_YEAR);
+      UIManager.selectYear(INIT_YEAR);
+    }, 800);
+
+    // 4. 隐藏加载动画
+    setTimeout(() => {
+      const overlay = document.getElementById('loading-overlay');
+      if (overlay) overlay.classList.add('fade-out');
+      setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 500);
+    }, 2200);
+
+    // 5. 监听 STAC item 选中事件
+    document.addEventListener('stacItemSelected', function (e) {
+      const item = e.detail;
+      _showSTACItemOnMap(item);
+    });
+  });
+})();
+
+// ──────────────────────────────────────────
+//  全局事件处理函数
+// ──────────────────────────────────────────
+
+// 城市切换（默认武汉市）
+const CITY_COORDS = {
+  wuhan:     { lon: 114.3567, lat: 30.5164, name: '武汉市' },
+  chengdu:   { lon: 104.0668, lat: 30.5728, name: '成都市' },
+  chongqing: { lon: 106.5516, lat: 29.5630, name: '重庆市' },
+  nanjing:   { lon: 118.7969, lat: 32.0603, name: '南京市' },
+  guangzhou: { lon: 113.2644, lat: 23.1291, name: '广州市' },
+};
+
+function onCityChange(val) {
+  const city = CITY_COORDS[val];
+  if (!city) return;
+  ToastManager.show(`切换至 ${city.name}`, 'info');
+}
+
+function onFlyToCity() {
+  const select = document.getElementById('city-select');
+  const key    = select ? select.value : 'wuhan';
+  const city   = CITY_COORDS[key] || CITY_COORDS.wuhan;
+  MapManager.flyTo(city.lon, city.lat, 100000, 0, -55, 2.0);
+}
+
+function onUnitChange(btn, unit) {
+  document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ToastManager.show(`分析单元：${unit === 'district' ? '行政区' : unit === 'grid' ? '网格' : '社区'}`, 'info');
+}
+
+// 手动触发城市中心分析（默认武汉理工大学）
+function onManualAnalysis() {
+  const city = CITY_COORDS['wuhan'];
+  const minutes = UIManager.getCurrentYear ? [5, 10, 15] : [5, 10, 15];
+  AnalysisManager.runAccessibilityAnalysis(city.lon, city.lat, minutes);
+}
+
+// 图层切换（在地图上显示 POI 高亮标注）
+function onLayerToggle(el, layerKey) {
+  el.classList.toggle('active');
+  const cb = el.querySelector('input[type="checkbox"]');
+  if (cb) cb.checked = el.classList.contains('active');
+
+  if (el.classList.contains('active')) {
+    // 根据图层类型加载对应设施到地图
+    const typeMap = {
+      'poi-medical':   'medical',
+      'poi-education': 'education',
+      'poi-park':      'park',
+    };
+    if (typeMap[layerKey]) {
+      AnalysisManager.showFacilityLayer(typeMap[layerKey], UIManager.getCurrentYear ? UIManager.getCurrentYear() : 2026);
+    } else if (layerKey === 'heatmap') {
+      ToastManager.show('人口热力图已开启（需服务端数据支持）', 'warn');
+    } else if (layerKey === 'isochrone') {
+      ToastManager.show('等时圈需先进行可达性分析', 'info');
+    }
+  } else {
+    AnalysisManager.clearAnalysis();
+  }
+}
+
+// 透明度调节
+function onOpacityChange(val) {
+  const layers = MapManager.viewer.imageryLayers;
+  if (layers.length > 0) {
+    const annotation = layers.get(layers.length - 1);
+    if (annotation) annotation.alpha = val / 100;
+  }
+}
+
+// 场景模式切换（2D/3D）
+let _is2D = true;
+function toggleSceneMode() {
+  _is2D = !_is2D;
+  const viewer = MapManager.viewer;
+  if (_is2D) {
+    viewer.scene.morphTo2D(1.0);
+    ToastManager.show('已切换至 2D 平面模式', 'info');
+  } else {
+    viewer.scene.morphTo3D(1.0);
+    ToastManager.show('已切换至 3D 球体模式', 'info');
+  }
+}
+
+// 全屏
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+// 关闭弹窗
+function closePopup() {
+  document.getElementById('info-popup').classList.remove('visible');
+}
+
+// STAC item 上图展示
+function _showSTACItemOnMap(item) {
+  if (!item || !item.bbox) return;
+  const [west, south, east, north] = item.bbox;
+  const lon = (west + east) / 2;
+  const lat = (south + north) / 2;
+  MapManager.flyTo(lon, lat, 80000, 0, -50, 1.5);
+
+  // 显示外包矩形
+  const viewer = MapManager.viewer;
+  viewer.entities.add({
+    rectangle: {
+      coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
+      material: Cesium.Color.fromCssColorString('#06b6d4').withAlpha(0.08),
+      outline: true,
+      outlineColor: Cesium.Color.fromCssColorString('#06b6d4').withAlpha(0.7),
+      outlineWidth: 2,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+  });
+
+  ToastManager.show(`已定位数据项：${item.properties.title || item.id}`, 'success');
+}
+</script>
+
+</body>
+</html>

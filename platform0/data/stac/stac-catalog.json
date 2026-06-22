@@ -1,0 +1,49 @@
+{
+  "type": "Catalog",
+  "id": "urban-life-circle-catalog",
+  "stac_version": "1.0.0",
+  "title": "城市生活圈多源大数据目录",
+  "description": "基于多源大数据的城市\"生活圈\"品质动态监测与评估平台数据目录，整合城市设施POI、遥感影像、人口热力、路网等多源异构数据，符合STAC v1.0.0标准规范。",
+  "conformsTo": [
+    "https://api.stacspec.org/v1.0.0/core",
+    "https://api.stacspec.org/v1.0.0/item-search",
+    "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core"
+  ],
+  "links": [
+    {
+      "rel": "self",
+      "href": "./stac-catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "./stac-catalog.json",
+      "type": "application/json",
+      "title": "根目录"
+    },
+    {
+      "rel": "child",
+      "href": "./collections/poi-facilities.json",
+      "type": "application/json",
+      "title": "城市设施POI数据集"
+    },
+    {
+      "rel": "child",
+      "href": "./collections/remote-sensing.json",
+      "type": "application/json",
+      "title": "遥感影像数据集"
+    },
+    {
+      "rel": "child",
+      "href": "./collections/population-heatmap.json",
+      "type": "application/json",
+      "title": "人口热力数据集"
+    },
+    {
+      "rel": "child",
+      "href": "./collections/road-network.json",
+      "type": "application/json",
+      "title": "路网数据集"
+    }
+  ]
+}
